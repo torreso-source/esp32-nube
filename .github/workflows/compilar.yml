@@ -1,0 +1,36 @@
+name: Compilar ESP32
+on:
+  push:
+    paths: ['sketch/**']
+  workflow_dispatch:
+    inputs:
+      placa:
+        description: FQBN de la placa
+        default: esp32:esp32:esp32cam
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Instalar core ESP32
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+      - name: Compilar
+        run: |
+          PLACA="${{ github.event.inputs.placa }}"
+          PLACA="${PLACA:-esp32:esp32:esp32cam}"
+          arduino-cli compile --fqbn "$PLACA" --output-dir out sketch
+          ls -l out
+          cp out/*.merged.bin firmware.bin
+      - name: Publicar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest firmware.bin --title "ultimo build" --notes "Compilado automaticamente"
